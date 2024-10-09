@@ -186,7 +186,13 @@
         localStorage.setItem('products', JSON.stringify(products));
 
         loadProducts();
-        clearForm();
+        clearForm(); // Call clearForm after adding the product
+    }
+
+    function clearForm() {
+        document.getElementById('product-name').value = '';
+        document.getElementById('product-price').value = '';
+        document.getElementById('product-image').value = '';
     }
 
     function removeProduct(productName) {
