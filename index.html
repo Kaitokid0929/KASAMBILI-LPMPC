@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Shop - Admin</title>
+    <title>My Shop - User</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -41,17 +41,6 @@
         h2 {
             color: #4CAF50;
         }
-        .product-form, .order-list {
-            width: 100%;
-            margin-bottom: 20px;
-        }
-        .product-form input, .product-form button {
-            padding: 10px;
-            margin: 5px 0;
-            width: calc(100% - 22px);
-            border: 2px solid #4CAF50;
-            border-radius: 5px;
-        }
         .product-list {
             display: flex;
             flex-wrap: wrap;
@@ -67,31 +56,19 @@
             text-align: center;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        .order {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 10px;
-            margin: 5px;
-            background: #f9f9f9;
-        }
-        .delete-button {
-            background: #f44336;
+        .cart-button, .checkout-button, .submit-button {
+            background: #4CAF50;
             color: white;
             border: none;
             border-radius: 5px;
-            padding: 5px 10px;
+            padding: 10px;
             cursor: pointer;
+            margin-top: 10px;
         }
-        footer {
-            text-align: center;
-            padding: 20px;
-            background: #4CAF50;
-            color: white;
-            width: 100%;
-            position: relative;
-            bottom: 0;
+        .cart-button {
+            background: #f44336;
         }
-        .popup {
+        .cart-popup, .checkout-popup {
             display: none;
             position: fixed;
             top: 50%;
@@ -122,28 +99,63 @@
 <body>
 
 <header>
-    <div class="logo">My Shop - Admin</div>
+    <div class="logo">My Shop - User</div>
 </header>
 
 <div class="container">
 
-    <div class="product-form">
-        <h2>Add / Update Product</h2>
-        <input type="text" id="product-name" placeholder="Product Name" required>
-        <input type="number" id="product-price" placeholder="Product Price" required>
-        <input type="text" id="product-image" placeholder="Product Image URL" required>
-        <button id="submit-button" onclick="addOrUpdateProduct()">Add Product</button>
-    </div>
-
+    <h2>Products</h2>
     <div class="product-list" id="product-list"></div>
 
-    <button onclick="toggleOrderList()">View Orders</button>
-    <div class="popup" id="order-popup">
-        <h2>Orders</h2>
-        <div id="orders"></div>
-        <button onclick="toggleOrderList()">Close</button>
+    <button class="cart-button" onclick="toggleCart()">View Cart (<span id="cart-count">0</span>)</button>
+
+    <!-- Cart Popup -->
+    <div class="cart-popup" id="cart-popup">
+        <h2>Your Cart</h2>
+        <div id="cart-items"></div>
+        <p><strong>Total:</strong> ₱<span id="total-price">0.00</span></p>
+        <button class="checkout-button" onclick="showCheckoutForm()">Checkout</button>
+        <button class="checkout-button" onclick="toggleCart()">Close</button>
     </div>
-    <div class="overlay" id="overlay" onclick="toggleOrderList()"></div>
+
+    <!-- Checkout Form Popup -->
+    <div class="checkout-popup" id="checkout-form">
+        <h2>Checkout</h2>
+        <div class="form-group">
+            <label for="name">Full Name</label>
+            <input type="text" id="name" required>
+        </div>
+        <div class="form-group">
+            <label for="passbook-number">Passbook Number</label>
+            <input type="text" id="passbook-number" required>
+        </div>
+        <div class="form-group">
+            <label for="address">Address</label>
+            <input type="text" id="address" required>
+        </div>
+        <div class="form-group">
+            <label for="delivery-method">Pick-up or Deliver</label>
+            <select id="delivery-method" onchange="toggleDateFields()">
+                <option value="pickup">Pick-up</option>
+                <option value="deliver">Deliver</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="date">Date (Pick-up/Delivery)</label>
+            <input type="date" id="date" required>
+        </div>
+        <div class="form-group">
+            <label for="payment-mode">Mode of Payment</label>
+            <select id="payment-mode">
+                <option value="cash">Cash</option>
+                <option value="loan">Loan</option>
+            </select>
+        </div>
+        <button class="submit-button" onclick="submitOrder()">Submit Order</button>
+        <button class="checkout-button" onclick="toggleCheckoutForm()">Cancel</button>
+    </div>
+
+    <div class="overlay" id="overlay" onclick="toggleCart(); toggleCheckoutForm();"></div>
 
 </div>
 
@@ -152,8 +164,9 @@
 </footer>
 
 <script>
-    let editingProductName = null;
+    let cart = [];
 
+    // Load products from the admin database (could use an API)
     function loadProducts() {
         const products = JSON.parse(localStorage.getItem('products')) || [];
         const productList = document.getElementById('product-list');
@@ -166,118 +179,121 @@
                 <h3>${product.name}</h3>
                 <p>₱${product.price.toFixed(2)}</p>
                 <img src="${product.image}" alt="${product.name}" style="width: 100%; height: auto;">
-                <button onclick="removeProduct('${product.name}')">Remove</button>
-                <button onclick="modifyProduct('${product.name}')">Modify</button>
+                <button onclick="addToCart('${product.name}', ${product.price})">Add to Cart</button>
             `;
             productList.appendChild(productDiv);
         });
     }
 
-    function addOrUpdateProduct() {
-        const name = document.getElementById('product-name').value;
-        const price = parseFloat(document.getElementById('product-price').value);
-        const image = document.getElementById('product-image').value;
-
-        if (!name || isNaN(price) || !image) {
-            alert("Please fill out all fields correctly.");
-            return;
-        }
-
-        const products = JSON.parse(localStorage.getItem('products')) || [];
-        
-        if (editingProductName) {
-            // Update existing product
-            const updatedProducts = products.map(product => {
-                if (product.name === editingProductName) {
-                    return { name, price, image }; // Update product details
-                }
-                return product;
-            });
-            localStorage.setItem('products', JSON.stringify(updatedProducts));
-            editingProductName = null; // Reset editing state
-            document.getElementById('submit-button').innerText = 'Add Product'; // Reset button text
+    function addToCart(name, price) {
+        const existingItem = cart.find(item => item.name === name);
+        if (existingItem) {
+            existingItem.quantity++;
         } else {
-            // Add new product
-            products.push({ name, price, image });
-            localStorage.setItem('products', JSON.stringify(products));
+            cart.push({ name, price, quantity: 1 });
         }
 
-        loadProducts();
-        clearForm(); // Clear form after adding or updating
+        document.getElementById('cart-count').innerText = cart.length;
     }
 
-    function clearForm() {
-        document.getElementById('product-name').value = '';
-        document.getElementById('product-price').value = '';
-        document.getElementById('product-image').value = '';
-    }
-
-    function removeProduct(productName) {
-        const products = JSON.parse(localStorage.getItem('products')) || [];
-        const updatedProducts = products.filter(product => product.name !== productName);
-        localStorage.setItem('products', JSON.stringify(updatedProducts));
-        loadProducts();
-    }
-
-    function modifyProduct(productName) {
-        const products = JSON.parse(localStorage.getItem('products')) || [];
-        const product = products.find(p => p.name === productName);
-
-        if (product) {
-            document.getElementById('product-name').value = product.name;
-            document.getElementById('product-price').value = product.price;
-            document.getElementById('product-image').value = product.image;
-            editingProductName = productName; // Set the product name for editing
-            document.getElementById('submit-button').innerText = 'Update Product'; // Change button text
-        }
-    }
-
-    function loadOrders() {
-        const orders = JSON.parse(localStorage.getItem('orders')) || [];
-        const ordersDiv = document.getElementById('orders');
-
-        ordersDiv.innerHTML = '';
-        orders.forEach((order, index) => {
-            const orderDiv = document.createElement('div');
-            orderDiv.className = 'order';
-            orderDiv.innerHTML = `
-                <p><strong>Name:</strong> ${order.name}</p>
-                <p><strong>Address:</strong> ${order.address}</p>
-                <p><strong>Payment Type:</strong> ${order.paymentType}</p>
-                <p><strong>Total:</strong> ₱${order.total.toFixed(2)}</p>
-                <p><strong>Products:</strong></p>
-                <ul>
-                    ${order.cart.map(item => `<li>${item.name} - ₱${item.price.toFixed(2)}</li>`).join('')}
-                </ul>
-                <button class="delete-button" onclick="deleteOrder(${index})">Delete Order</button>
-            `;
-            ordersDiv.appendChild(orderDiv);
-        });
-    }
-
-    function deleteOrder(index) {
-        const orders = JSON.parse(localStorage.getItem('orders')) || [];
-        orders.splice(index, 1);
-        localStorage.setItem('orders', JSON.stringify(orders));
-        loadOrders();
-    }
-
-    function toggleOrderList() {
-        const popup = document.getElementById('order-popup');
+    function toggleCart() {
+        const cartPopup = document.getElementById('cart-popup');
         const overlay = document.getElementById('overlay');
-        if (popup.style.display === 'block') {
-            popup.style.display = 'none';
+
+        if (cartPopup.style.display === 'block') {
+            cartPopup.style.display = 'none';
             overlay.style.display = 'none';
         } else {
-            loadOrders(); // Load orders before showing the popup
-            popup.style.display = 'block';
+            displayCartItems();
+            cartPopup.style.display = 'block';
             overlay.style.display = 'block';
         }
     }
 
-    window.onload = function() {
-        loadProducts();
-    };
+    function displayCartItems() {
+        const cartItemsDiv = document.getElementById('cart-items');
+        cartItemsDiv.innerHTML = '';
+
+        let totalPrice = 0;
+        cart.forEach(item => {
+            totalPrice += item.price * item.quantity;
+            cartItemsDiv.innerHTML += `
+                <p>${item.name} - ₱${item.price.toFixed(2)} x ${item.quantity}</p>
+            `;
+        });
+
+        document.getElementById('total-price').innerText = totalPrice.toFixed(2);
+    }
+
+    function toggleCheckoutForm() {
+        const checkoutForm = document.getElementById('checkout-form');
+        const overlay = document.getElementById('overlay');
+
+        if (checkoutForm.style.display === 'block') {
+            checkoutForm.style.display = 'none';
+            overlay.style.display = 'none';
+        } else {
+            checkoutForm.style.display = 'block';
+            overlay.style.display = 'block';
+        }
+    }
+
+    function showCheckoutForm() {
+        toggleCart();
+        toggleCheckoutForm();
+    }
+
+    function submitOrder() {
+        const name = document.getElementById('name').value;
+        const passbookNumber = document.getElementById('passbook-number').value;
+        const address = document.getElementById('address').value;
+        const deliveryMethod = document.getElementById('delivery-method').value;
+        const date = document.getElementById('date').value;
+        const paymentMode = document.getElementById('payment-mode').value;
+
+        const order = {
+            name,
+            passbookNumber,
+            address,
+            deliveryMethod,
+            date,
+            paymentMode,
+            items: cart,
+            total: document.getElementById('total-price').innerText
+        };
+
+        fetch('https://example.com/submit-order', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(order)
+        }).then(response => {
+            if (response.ok) {
+                alert('Order submitted successfully!');
+                cart = [];
+                document.getElementById('cart-count').innerText = 0;
+                toggleCheckoutForm();
+            }
+        }).catch(error => {
+            alert('Failed to submit order. Please try again.');
+        });
+    }
+
+    function toggleDateFields() {
+        const deliveryMethod = document.getElementById('delivery-method').value;
+        const dateLabel = document.querySelector('label[for="date"]');
+        const dateInput = document.getElementById('date');
+
+        if (deliveryMethod === 'pickup') {
+            dateLabel.innerText = 'Pick-up Date';
+        } else {
+            dateLabel.innerText = 'Delivery Date';
+        }
+    }
+
+    // Initialize products on page load
+    window.onload = loadProducts;
 </script>
 
 </body>
